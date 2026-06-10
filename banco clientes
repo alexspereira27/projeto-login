@@ -1,0 +1,13 @@
+import sqlite3
+
+banco = sqlite3.connect('clientes.db')
+
+cursor = banco.cursor()
+
+#cursor.execute("CREATE TABLE clientes (Nome text, Codigo integer, Fone integer, Email text)")
+
+cursor.execute("INSERT INTO clientes VALUES ('central_do_pc', 236, 8137235003, 'centraldopc@outlook.com')")
+
+banco.commit()
+"""cursor.execute("SELECT * FROM clientes")
+print(cursor.fetchall())"""

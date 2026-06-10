@@ -1,0 +1,13 @@
+import sqlite3
+
+banco = sqlite3.connect('coordenação.db')
+
+cursor = banco.cursor()
+
+#cursor.execute("CREATE TABLE vendedores (Nome text, Codigo integer)")
+
+#cursor.execute("INSERT INTO vendedores VALUES ('alex', 2703)")
+
+#banco.commit()
+"""cursor.execute("SELECT * FROM vendedoress")
+print(cursor.fetchall())"""

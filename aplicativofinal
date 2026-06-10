@@ -1,0 +1,540 @@
+import sqlite3
+import customtkinter as ctk
+from tkinter import messagebox, ttk
+from datetime import datetime
+import os
+
+# PDF
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import landscape, A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+# CONFIGURAÇÕES
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
+
+
+# RELATÓRIOS
+class JanelaRelatorios:
+
+    def __init__(self, master):
+        self.janela = ctk.CTkToplevel(master)
+        self.janela.title("Relatório de Atendimentos - Gestão")
+        self.janela.geometry("1300x600")
+
+        self.janela.attributes("-topmost", True)
+        self.janela.focus()
+
+        ctk.CTkLabel(
+            self.janela,
+            text="Histórico de Atendimentos",
+            font=("Roboto", 22, "bold")
+        ).pack(pady=20)
+
+        # BOTÃO PDF
+        ctk.CTkButton(
+            self.janela,
+            text="📄 EXPORTAR PDF",
+            fg_color="#c0392b",
+            hover_color="#922b21",
+            command=self.exportar_pdf
+        ).pack(pady=10)
+
+        # FRAME TABELA
+        self.frame_tabela = ctk.CTkFrame(self.janela)
+        self.frame_tabela.pack(
+            expand=True,
+            fill="both",
+            padx=20,
+            pady=10
+        )
+
+        # ESTILO
+        style = ttk.Style()
+        style.theme_use("clam")
+
+        style.configure(
+            "Treeview",
+            background="#2b2b2b",
+            foreground="white",
+            fieldbackground="#2b2b2b",
+            borderwidth=0,
+            rowheight=28
+        )
+
+        style.map(
+            "Treeview",
+            background=[("selected", "#1f538d")]
+        )
+
+        # COLUNAS
+        colunas = (
+            "Data/Hora", "Cód", "Cliente", "Vendedor", "Tipo",
+            "Comprou", "Produto", "Preço", "Pagamento", "Observação", "Motivo"
+        )
+
+        # TREEVIEW
+        self.tree = ttk.Treeview(
+            self.frame_tabela,
+            columns=colunas,
+            show="headings"
+        )
+
+        # CONFIGURAÇÃO COLUNAS
+        for col in colunas:
+            self.tree.heading(col, text=col)
+
+            if col in ["Observação", "Motivo"]:
+                self.tree.column(col, width=250, anchor="w")
+            elif col in ["Cliente", "Vendedor"]:
+                self.tree.column(col, width=180, anchor="center")
+            elif col == "Produto":
+                self.tree.column(col, width=150, anchor="center")
+            else:
+                self.tree.column(col, width=100, anchor="center")
+
+        # SCROLLBARS
+        scrollbar_y = ttk.Scrollbar(
+            self.frame_tabela,
+            orient="vertical",
+            command=self.tree.yview
+        )
+
+        scrollbar_x = ttk.Scrollbar(
+            self.frame_tabela,
+            orient="horizontal",
+            command=self.tree.xview
+        )
+
+        self.tree.configure(
+            yscrollcommand=scrollbar_y.set,
+            xscrollcommand=scrollbar_x.set
+        )
+
+        # GRID
+        self.frame_tabela.grid_rowconfigure(0, weight=1)
+        self.frame_tabela.grid_columnconfigure(0, weight=1)
+
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        scrollbar_y.grid(row=0, column=1, sticky="ns")
+        scrollbar_x.grid(row=1, column=0, sticky="ew")
+
+        self.carregar_dados()
+
+    # CARREGAR DADOS
+    def carregar_dados(self):
+        try:
+            with sqlite3.connect("clientes.db") as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT
+                        data_hora, codigo_cliente, nome_cliente, vendedor,
+                        tipo_atendimento, comprou, produto, preco,
+                        pagamento, observacao, motivo
+                    FROM historico_atendimentos
+                    ORDER BY id DESC
+                """)
+
+                dados = cursor.fetchall()
+
+                for item in self.tree.get_children():
+                    self.tree.delete(item)
+
+                for row in dados:
+                    self.tree.insert("", "end", values=row)
+
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao carregar dados:\n{e}")
+
+    # EXPORTAR PDF
+    def exportar_pdf(self):
+        try:
+            nome_pdf = "relatorio_atendimentos.pdf"
+
+            pdf = SimpleDocTemplate(
+                nome_pdf,
+                pagesize=landscape(A4),
+                rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20
+            )
+
+            elementos = []
+            dados = []
+
+            colunas = [
+                "Data/Hora", "Cód", "Cliente", "Vendedor", "Tipo",
+                "Comprou", "Produto", "Preço", "Pagamento", "Observação", "Motivo"
+            ]
+
+            # Estilos para permitir quebra de texto automática nas células do PDF
+            styles = getSampleStyleSheet()
+            style_normal = ParagraphStyle(
+                'CelularNormal',
+                parent=styles['Normal'],
+                fontName='Helvetica',
+                fontSize=8,
+                leading=10
+            )
+            style_titulo = ParagraphStyle(
+                'CelularTitulo',
+                parent=styles['Normal'],
+                fontName='Helvetica-Bold',
+                fontSize=8,
+                leading=10,
+                textColor=colors.white
+            )
+
+            dados.append([Paragraph(c, style_titulo) for c in colunas])
+
+            for item in self.tree.get_children():
+                linha_original = self.tree.item(item)["values"]
+                linha_formatada = []
+                for celula in linha_original:
+                    texto = str(celula) if celula is not None else ""
+                    linha_formatada.append(Paragraph(texto, style_normal))
+                dados.append(linha_formatada)
+
+            # LARGURA DAS COLUNAS
+            larguras = [85, 30, 95, 85, 55, 50, 75, 50, 65, 130, 130]
+
+            tabela = Table(
+                dados,
+                colWidths=larguras,
+                repeatRows=1
+            )
+
+            tabela.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.darkblue),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.beige])
+            ]))
+
+            elementos.append(tabela)
+            pdf.build(elementos)
+
+            os.startfile(nome_pdf)
+
+            messagebox.showinfo(
+                "PDF",
+                "Relatório exportado e aberto com sucesso!"
+            )
+
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao exportar PDF:\n{e}")
+
+
+# SISTEMA PRINCIPAL
+class SistemaPrincipal:
+
+    def __init__(self, vendedor_nome="", nivel_acesso="vendedor"):
+        self.vendedor_nome = vendedor_nome
+        self.nivel_acesso = nivel_acesso
+
+        self.janela_principal = ctk.CTk()
+        self.janela_principal.title(f"Sistema de Clientes - {self.nivel_acesso.upper()}")
+        self.janela_principal.geometry("550x850")
+
+        # VENDEDOR LOGADO
+        ctk.CTkLabel(
+            self.janela_principal,
+            text=f"Vendedor: {self.vendedor_nome}",
+            font=("Arial", 14, "bold"),
+            text_color="#00ff88"
+        ).pack(pady=(10, 0))
+
+        # BOTÃO RELATÓRIO
+        if self.nivel_acesso == "supervisor":
+            self.btn_relatorio = ctk.CTkButton(
+                self.janela_principal,
+                text="📊 VER RELATÓRIOS",
+                fg_color="#34495e",
+                hover_color="#2c3e50",
+                command=self.abrir_relatorios
+            )
+
+            self.btn_relatorio.pack(
+                pady=(10, 0),
+                padx=20,
+                anchor="ne"
+            )
+
+        # TÍTULO
+        ctk.CTkLabel(
+            self.janela_principal,
+            text="Busca de Cliente",
+            font=("Roboto", 20, "bold")
+        ).pack(pady=(10, 5))
+
+        # CÓDIGO
+        self.entry_codigo_busca = ctk.CTkEntry(
+            self.janela_principal,
+            placeholder_text="Código do cliente",
+            width=200
+        )
+        self.entry_codigo_busca.pack(pady=5)
+
+        # BOTÃO PESQUISA
+        btn_pesquisar = ctk.CTkButton(
+            self.janela_principal,
+            text="Pesquisar",
+            width=200,
+            command=self.acao_botao_buscar
+        )
+        btn_pesquisar.pack(pady=(0, 15))
+
+        # FRAME
+        self.frame_dados = ctk.CTkFrame(self.janela_principal, fg_color="transparent")
+        self.frame_dados.pack(pady=5, padx=10, fill="x")
+
+        # CAMPOS
+        self.campos = {}
+        itens = [
+            ("Nome:", "entry_nome"),
+            ("Telefone:", "entry_fone"),
+            ("E-mail:", "entry_email")
+        ]
+
+        for i, (label, nome_var) in enumerate(itens):
+            ctk.CTkLabel(self.frame_dados, text=label).grid(row=i, column=0, sticky="e", padx=10, pady=5)
+            self.campos[nome_var] = ctk.CTkEntry(self.frame_dados, width=320)
+            self.campos[nome_var].grid(row=i, column=1, sticky="w", pady=5)
+
+        # TIPO ATENDIMENTO
+        ctk.CTkLabel(self.frame_dados, text="Atendimento:").grid(row=3, column=0, sticky="e", padx=10, pady=10)
+        self.var_tipo_atendimento = ctk.StringVar(value="Telefone")
+
+        frame_tipo = ctk.CTkFrame(self.frame_dados, fg_color="transparent")
+        frame_tipo.grid(row=3, column=1, sticky="w")
+
+        ctk.CTkRadioButton(frame_tipo, text="Telefone", variable=self.var_tipo_atendimento, value="Telefone").pack(side="left", padx=5)
+        ctk.CTkRadioButton(frame_tipo, text="Visita", variable=self.var_tipo_atendimento, value="Visita").pack(side="left", padx=5)
+
+        # COMPRA
+        ctk.CTkLabel(self.frame_dados, text="Comprou?").grid(row=4, column=0, sticky="e", padx=10, pady=15)
+        self.var_compra = ctk.IntVar(value=0)
+
+        frame_radio = ctk.CTkFrame(self.frame_dados, fg_color="transparent")
+        frame_radio.grid(row=4, column=1, sticky="w")
+
+        ctk.CTkRadioButton(frame_radio, text="Sim", variable=self.var_compra, value=1, command=self.atualizar_campos_dinamicos).pack(side="left", padx=5)
+        ctk.CTkRadioButton(frame_radio, text="Não", variable=self.var_compra, value=2, command=self.atualizar_campos_dinamicos).pack(side="left", padx=5)
+
+        # CAMPOS DINÂMICOS
+        self.label_ref = ctk.CTkLabel(self.frame_dados, text="Produto:")
+        self.entry_ref = ctk.CTkEntry(self.frame_dados, width=320)
+
+        self.label_preco = ctk.CTkLabel(self.frame_dados, text="Preço:")
+        self.entry_preco = ctk.CTkEntry(self.frame_dados, width=320)
+
+        self.label_prazo = ctk.CTkLabel(self.frame_dados, text="Pagamento:")
+        self.entry_prazo = ctk.CTkEntry(self.frame_dados, width=320)
+
+        self.label_obs = ctk.CTkLabel(self.frame_dados, text="Observação:")
+        self.entry_obs = ctk.CTkEntry(self.frame_dados, width=320)
+
+        self.label_motivo = ctk.CTkLabel(self.frame_dados, text="Motivo:")
+        self.entry_motivo = ctk.CTkEntry(self.frame_dados, width=320)
+
+        # BOTÃO SALVAR
+        self.btn_salvar = ctk.CTkButton(
+            self.janela_principal,
+            text="SALVAR ATENDIMENTO",
+            fg_color="#27ae60",
+            hover_color="#1e8449",
+            width=250,
+            height=40,
+            font=("Arial", 14, "bold"),
+            command=self.salvar_dados
+        )
+        self.btn_salvar.pack(pady=20)
+        self.janela_principal.mainloop()
+
+    def abrir_relatorios(self):
+        JanelaRelatorios(self.janela_principal)
+
+    def atualizar_campos_dinamicos(self):
+        widgets = [
+            self.label_ref, self.entry_ref,
+            self.label_preco, self.entry_preco,
+            self.label_prazo, self.entry_prazo,
+            self.label_obs, self.entry_obs,
+            self.label_motivo, self.entry_motivo
+        ]
+
+        for w in widgets:
+            w.grid_forget()
+
+        if self.var_compra.get() == 1:
+            self.label_ref.grid(row=5, column=0, padx=10, pady=5, sticky="e")
+            self.entry_ref.grid(row=5, column=1, pady=5, sticky="w")
+
+            self.label_preco.grid(row=6, column=0, padx=10, pady=5, sticky="e")
+            self.entry_preco.grid(row=6, column=1, pady=5, sticky="w")
+
+            self.label_prazo.grid(row=7, column=0, padx=10, pady=5, sticky="e")
+            self.entry_prazo.grid(row=7, column=1, pady=5, sticky="w")
+
+            self.label_obs.grid(row=8, column=0, padx=10, pady=5, sticky="e")
+            self.entry_obs.grid(row=8, column=1, pady=5, sticky="w")
+
+        elif self.var_compra.get() == 2:
+            self.label_motivo.grid(row=5, column=0, padx=10, pady=5, sticky="e")
+            self.entry_motivo.grid(row=5, column=1, pady=5, sticky="w")
+
+    def acao_botao_buscar(self):
+        codigo = self.entry_codigo_busca.get()
+        if not codigo.isdigit():
+            messagebox.showwarning("Aviso", "Digite um código numérico.")
+            return
+
+        try:
+            with sqlite3.connect("clientes.db") as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT nome, fone, email
+                    FROM clientes
+                    WHERE codigo = ?
+                """, (int(codigo),))
+
+                res = cursor.fetchone()
+
+                if res:
+                    for i, key in enumerate(["entry_nome", "entry_fone", "entry_email"]):
+                        self.campos[key].delete(0, "end")
+                        self.campos[key].insert(0, res[i])
+                else:
+                    messagebox.showinfo("Busca", "Cliente não encontrado.")
+
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao acessar banco:\n{e}")
+
+    def limpar_tela(self):
+        self.entry_codigo_busca.delete(0, "end")
+
+        for campo in self.campos.values():
+            campo.delete(0, "end")
+
+        self.entry_ref.delete(0, "end")
+        self.entry_preco.delete(0, "end")
+        self.entry_prazo.delete(0, "end")
+        self.entry_obs.delete(0, "end")
+        self.entry_motivo.delete(0, "end")
+
+        self.var_compra.set(0)
+        self.atualizar_campos_dinamicos()
+
+    def salvar_dados(self):
+        nome = self.campos["entry_nome"].get()
+        if not nome:
+            messagebox.showwarning("Aviso", "Pesquise um cliente primeiro.")
+            return
+
+        try:
+            with sqlite3.connect("clientes.db") as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO historico_atendimentos (
+                        data_hora, codigo_cliente, nome_cliente, vendedor,
+                        tipo_atendimento, comprou, produto, preco,
+                        pagamento, observacao, motivo
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    datetime.now().strftime("%d/%m/%Y %H:%M"),
+                    self.entry_codigo_busca.get(),
+                    nome,
+                    self.vendedor_nome,
+                    self.var_tipo_atendimento.get(),
+                    "Sim" if self.var_compra.get() == 1 else "Não",
+                    self.entry_ref.get() if self.var_compra.get() == 1 else "",
+                    self.entry_preco.get() if self.var_compra.get() == 1 else "",
+                    self.entry_prazo.get() if self.var_compra.get() == 1 else "",
+                    self.entry_obs.get() if self.var_compra.get() == 1 else "",
+                    self.entry_motivo.get() if self.var_compra.get() == 2 else ""
+                ))
+
+            messagebox.showinfo("Sucesso", "Atendimento salvo!")
+            self.limpar_tela()
+
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao salvar:\n{e}")
+
+
+# LOGIN
+class TelaLogin:
+
+    def __init__(self):
+        self.app = ctk.CTk()
+        self.app.title("Bytenordeste - Login")
+        self.app.geometry("350x450")
+        self.app.eval("tk::PlaceWindow . center")
+
+        ctk.CTkLabel(
+            self.app,
+            text="SISTEMA DE VENDAS",
+            font=("Arial", 20, "bold")
+        ).pack(pady=30)
+
+        self.campo_nome = ctk.CTkEntry(self.app, placeholder_text="Usuário", width=220)
+        self.campo_nome.pack(pady=10)
+
+        self.campo_codigo = ctk.CTkEntry(self.app, placeholder_text="Código", width=220, show="*")
+        self.campo_codigo.pack(pady=10)
+
+        ctk.CTkButton(self.app, text="ENTRAR", command=self.validar_login).pack(pady=40)
+
+        self.msg = ctk.CTkLabel(self.app, text="")
+        self.msg.pack()
+
+        self.app.mainloop()
+
+    def validar_login(self):
+        user = self.campo_nome.get().strip()
+        code = self.campo_codigo.get().strip()
+
+        if not user or not code:
+            self.msg.configure(text="Preencha os campos!", text_color="yellow")
+            return
+
+        try:
+            with sqlite3.connect("vendedores.db") as conn:
+                cursor = conn.cursor()
+
+                # SUPERVISOR
+                cursor.execute("""
+                    SELECT *
+                    FROM supervisor
+                    WHERE nome=? COLLATE NOCASE
+                    AND codigo=?
+                """, (user, code))
+
+                if cursor.fetchone():
+                    self.app.destroy()
+                    SistemaPrincipal(vendedor_nome=user, nivel_acesso="supervisor")
+                    return
+
+                # VENDEDOR
+                cursor.execute("""
+                    SELECT *
+                    FROM vendedores
+                    WHERE nome=? COLLATE NOCASE
+                    AND codigo=?
+                """, (user, code))
+
+                if cursor.fetchone():
+                    self.app.destroy()
+                    SistemaPrincipal(vendedor_nome=user, nivel_acesso="vendedor")
+                    return
+
+                self.msg.configure(text="Usuário ou código inválidos", text_color="red")
+
+        except Exception as e:
+            self.msg.configure(text=f"Erro: {e}", text_color="red")
+
+
+# EXECUTAR
+if __name__ == "__main__":
+    TelaLogin() 

@@ -1,0 +1,71 @@
+import customtkinter as ctk
+import sqlite3
+from tkinter import messagebox
+
+# --- FUNÇÃO PARA VERIFICAR CREDENCIAIS NO BANCO ---
+def verificar_no_banco(nome_vendedor, codigo_vendedor):
+    try:
+        # Conecta ao banco de dados
+        conn = sqlite3.connect('vendedores.db')
+        cursor = conn.cursor()
+        
+        # Procura por qualquer vendedor que tenha esse nome e esse código
+        query = "SELECT * FROM vendedores WHERE nome = ? AND codigo = ?"
+        cursor.execute(query, (nome_vendedor, codigo_vendedor))
+        
+        vendedor = cursor.fetchone()
+        conn.close()
+        
+        return vendedor  # Retorna o registro se achar, ou None se não achar
+    except Exception as e:
+        messagebox.showerror("Erro de Banco", f"Erro ao acessar vendedores.db: {e}")
+        return None
+
+# --- AÇÃO DO BOTÃO LOGIN ---
+def validar_login():
+    nome = campo_nome.get()
+    codigo = campo_codigo.get()
+
+    if not nome or not codigo:
+        resultado_login.configure(text='Preencha nome e código!', text_color='yellow')
+        return
+
+    # Chama a função que consulta o SQLite
+    usuario_valido = verificar_no_banco(nome, codigo)
+
+    if usuario_valido:
+        resultado_login.configure(text=f'Bem-vindo, {nome}!', text_color='#2ecc71')
+        # Sucesso! Aqui você pode fechar essa janela e abrir o sistema principal
+    else:
+        resultado_login.configure(text='Vendedor ou Código inválidos!', text_color='#e74c3c')
+        campo_codigo.delete(0, 'end')
+
+# --- INTERFACE GRÁFICA ---
+ctk.set_appearance_mode('dark')
+
+app = ctk.CTk()
+app.title('Bytenordeste - Login Vendedores')
+app.geometry('350x450')
+
+# Título Principal
+ctk.CTkLabel(app, text="SISTEMA DE VENDAS", font=("Arial", 20, "bold")).pack(pady=30)
+
+# Campo de Nome
+ctk.CTkLabel(app, text='Nome do Vendedor').pack(pady=(10, 0))
+campo_nome = ctk.CTkEntry(app, placeholder_text='Digite seu nome cadastrado', width=220)
+campo_nome.pack(pady=10)
+
+# Campo de Código
+ctk.CTkLabel(app, text='Código de Acesso').pack(pady=(10, 0))
+campo_codigo = ctk.CTkEntry(app, placeholder_text='Digite seu código', width=220, show='*')
+campo_codigo.pack(pady=10)
+
+# Botão de Entrada
+botao_login = ctk.CTkButton(app, text='ENTRAR', command=validar_login, font=("Arial", 14, "bold"))
+botao_login.pack(pady=40)
+
+# Feedback para o usuário
+resultado_login = ctk.CTkLabel(app, text='', font=("Arial", 12))
+resultado_login.pack()
+
+app.mainloop()

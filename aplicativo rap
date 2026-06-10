@@ -1,0 +1,32 @@
+import sqlite3
+
+def buscar_vendedor_por_codigo(codigo):
+    # 1. Conecta ao arquivo do banco de dados 
+    conexao = sqlite3.connect('vendedores.db')
+    cursor = conexao.cursor()
+
+    try:
+        # 2. Executa o comando SQL para buscar o nome pelo codigo
+        query = "SELECT nome FROM vendedores WHERE codigo = ?"
+        cursor.execute(query, (codigo,))
+
+        # 3. Recupera o resultado
+        resultado = cursor.fetchone()
+
+        if resultado:
+            return resultado[0]  # Retorna apenas o nome
+        else:
+            return "Vendedor não encontrado."
+
+    except sqlite3.Error as erro:
+        return f"Erro ao acessar o banco: {erro}"
+
+    finally:
+        # 4. Sempre fecha a conexão no final
+        conexao.close()
+
+# --- Testando o código ---
+codigo_procurado = input("Digite o código do vendedor: ")
+nome_vendedor = buscar_vendedor_por_codigo(codigo_procurado)
+
+print(f"Resultado: {nome_vendedor}")
