@@ -236,9 +236,3 @@ O sistema gera relatórios em PDF com:
 ## 📧 Contato
 
 Desenvolvido por: **Byte Nordeste**
-
----
-
-## 📄 Licença
-
-Todos os direitos reservados © 2024 Bytenordeste
