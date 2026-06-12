@@ -1,3 +1,10 @@
+🔗 Versão Inicial do Projeto
+
+Este sistema é uma evolução da primeira versão desenvolvida durante o processo de aprendizado e prototipação.
+
+Repositório da versão inicial:
+https://github.com/alexspereira27/Projeto_DEV)
+
 # Sistema de Vendas - Bytenordeste
 
 Um sistema de gestão de vendas e atendimentos desenvolvido em Python com interface gráfica moderna usando **CustomTkinter** e banco de dados **SQLite**.
